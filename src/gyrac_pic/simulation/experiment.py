@@ -7,7 +7,7 @@ from ..config import ExperimentConfig
 from ..constants import ELEMENTARY_CHARGE, ELECTRON_MASS, EPSILON_0, SPEED_OF_LIGHT
 from ..device import dtype_from_name, select_device
 from ..grid import CartesianGrid, negative_gradient
-from ..particles import deposit_charge_cic, gather_field_cic, kinetic_energy, relativistic_boris_push
+from ..particles import deposit_charge_cic, gather_field_cic, kinetic_energy, relativistic_boris_push, velocity_from_momentum
 from ..state import GridState, ParticleSpeciesState, SimulationState
 from ..fields.poisson import solve_pcg
 from ..visualization import RerunSink
@@ -56,7 +56,7 @@ class Experiment:
         zeros = torch.zeros(self.grid.shape, device=self.device, dtype=self.dtype)
         self.state = SimulationState(0, 0.0, species, GridState(zeros, zeros.clone(), torch.zeros((*self.grid.shape,3),device=self.device,dtype=self.dtype)))
         self._update_field()
-        self._diagnose(None)
+        self._diagnose(self._last_solve)
         return self.state
 
     def _update_field(self):
@@ -93,19 +93,57 @@ class Experiment:
 
     def _diagnose(self, info):
         def stats(name):
-            s=self.state.species[name]; values=kinetic_energy(s.momenta[s.alive],s.physical_mass_kg)/ELEMENTARY_CHARGE
-            return (float(values.mean()) if len(values) else 0, float(values.max()) if len(values) else 0, int(s.alive.sum()), len(s.alive)-int(s.alive.sum()))
+            s = self.state.species[name]
+            live_momenta = s.momenta[s.alive]
+            values = kinetic_energy(live_momenta, s.physical_mass_kg) / ELEMENTARY_CHARGE
+            speeds = torch.linalg.vector_norm(
+                velocity_from_momentum(live_momenta, s.physical_mass_kg), dim=-1
+            )
+            return (
+                float(values.mean()) if len(values) else 0.0,
+                float(values.max()) if len(values) else 0.0,
+                float(speeds.max()) if len(speeds) else 0.0,
+                int(s.alive.sum()),
+                len(s.alive) - int(s.alive.sum()),
+            )
         e=stats("electrons"); p=stats("protons")
-        self.latest_diagnostics=Diagnostics(e[0],e[1],p[0],e[2],p[2],e[3],p[3], info.iterations if info else 0, info.relative_residual if info else 0, info.converged if info else True)
+        field_magnitude = torch.linalg.vector_norm(self.state.grid.electric_field, dim=-1)
+        self.latest_diagnostics = Diagnostics(
+            mean_electron_energy_ev=e[0],
+            max_electron_energy_ev=e[1],
+            mean_proton_energy_ev=p[0],
+            max_proton_energy_ev=p[1],
+            max_electron_speed_m_per_s=e[2],
+            max_proton_speed_m_per_s=p[2],
+            num_alive_electrons=e[3],
+            num_alive_protons=p[3],
+            lost_electrons=e[4],
+            lost_protons=p[4],
+            poisson_iterations=info.iterations if info else 0,
+            poisson_relative_residual=info.relative_residual if info else 0.0,
+            poisson_converged=info.converged if info else True,
+            poisson_final_residual=info.final_residual if info else 0.0,
+            poisson_elapsed_seconds=info.elapsed_seconds if info else 0.0,
+            total_grid_charge_c=float(self.state.grid.rho.sum() * self.grid.cell_volume),
+            max_abs_charge_density_c_per_m3=float(self.state.grid.rho.abs().max()),
+            rms_electric_field_v_per_m=float(torch.sqrt(torch.mean(field_magnitude**2))),
+            max_electric_field_v_per_m=float(field_magnitude.max()),
+            max_abs_potential_v=float(self.state.grid.phi.abs().max()),
+        )
 
     def run(self, num_steps=None):
         if self.state is None: self.initialize()
-        for _ in range(self.config.num_steps if num_steps is None else num_steps):
+        self.print_diagnostics(label="run_start")
+        requested_steps = self.config.num_steps if num_steps is None else num_steps
+        for _ in range(requested_steps):
             with torch.inference_mode(): self.step()
             if self.state.step % self.config.visualization.visualization_stride == 0:
                 self.visualizer.log_frame(self.state,self.latest_diagnostics,self.config.visualization.max_particles_per_species)
+                self.print_diagnostics(label="progress")
             if self.config.checkpoint_stride and self.state.step % self.config.checkpoint_stride == 0:
                 self.save_checkpoint(f"runs/{self.config.name}/checkpoints/step_{self.state.step:08d}.pt")
+        if requested_steps and self.state.step % self.config.visualization.visualization_stride:
+            self.print_diagnostics(label="run_end")
         return self.state
 
     def visualize_initial_state(self):
@@ -122,6 +160,24 @@ class Experiment:
 
     def print_configuration(self): print(json.dumps(self.config.to_dict(),indent=2))
     def print_physical_scales(self): print(json.dumps(self.physical_scales(),indent=2))
+
+    def diagnostics_dict(self, label=None):
+        from dataclasses import asdict
+
+        result = {
+            "label": label,
+            "step": self.state.step,
+            "time_s": self.state.time_s,
+            "device": str(self.device),
+            "dtype": str(self.dtype).removeprefix("torch."),
+            **asdict(self.latest_diagnostics),
+        }
+        return result
+
+    def print_diagnostics(self, label=None):
+        if self.state is None:
+            raise RuntimeError("experiment is not initialized")
+        print("GYRAC_DIAGNOSTICS " + json.dumps(self.diagnostics_dict(label)))
 
     def save_checkpoint(self, path):
         if self.state is None: raise RuntimeError("experiment is not initialized")

@@ -8,8 +8,18 @@ def velocity_from_momentum(momentum, mass):
 
 
 def kinetic_energy(momentum, mass):
-    gamma = torch.sqrt(1 + (momentum * momentum).sum(-1) / (mass * mass * SPEED_OF_LIGHT ** 2))
-    return (gamma - 1) * mass * SPEED_OF_LIGHT ** 2
+    normalized_momentum_squared = (momentum * momentum).sum(-1) / (
+        mass * mass * SPEED_OF_LIGHT ** 2
+    )
+    gamma = torch.sqrt(1 + normalized_momentum_squared)
+    # This is algebraically equal to (gamma - 1) m c², but avoids catastrophic
+    # cancellation for non-relativistic particles when the simulation uses fp32.
+    return (
+        normalized_momentum_squared
+        / (gamma + 1)
+        * mass
+        * SPEED_OF_LIGHT ** 2
+    )
 
 
 def relativistic_boris_push(position, momentum, electric_field, magnetic_field, charge, mass, dt):

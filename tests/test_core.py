@@ -1,7 +1,7 @@
 import math
 import torch
 from gyrac_pic.domains import BoxDomain, CylindricalPECDomain
-from gyrac_pic.particles import deposit_charge_cic, gather_field_cic, relativistic_boris_push
+from gyrac_pic.particles import deposit_charge_cic, gather_field_cic, kinetic_energy, relativistic_boris_push
 from gyrac_pic.fields.poisson import apply_negative_laplacian, solve_pcg
 from gyrac_pic.constants import ELECTRON_MASS, ELEMENTARY_CHARGE
 
@@ -36,3 +36,11 @@ def test_boris_free_particle_and_magnetic_energy():
     zero=torch.zeros_like(p); magnetic=torch.tensor([[0.,0.,.1]])
     _,m=relativistic_boris_push(p,momentum,zero,magnetic,-ELEMENTARY_CHARGE,ELECTRON_MASS,1e-12)
     assert torch.allclose(torch.linalg.vector_norm(m),torch.linalg.vector_norm(momentum),rtol=1e-6)
+
+
+def test_nonrelativistic_kinetic_energy_is_stable_in_float32():
+    expected_ev = 1.0
+    speed = math.sqrt(2 * expected_ev * ELEMENTARY_CHARGE / ELECTRON_MASS)
+    momentum = torch.tensor([[ELECTRON_MASS * speed, 0.0, 0.0]], dtype=torch.float32)
+    actual_ev = kinetic_energy(momentum, ELECTRON_MASS) / ELEMENTARY_CHARGE
+    assert torch.allclose(actual_ev, torch.tensor([expected_ev]), rtol=1e-5)
