@@ -42,7 +42,10 @@ class VisualizationConfig:
     max_particles_per_species: int = 50_000
     log_grid: bool = True
     log_domain: bool = True
-    log_field_vectors: bool = False
+    log_field_vectors: bool = True
+    field_vector_grid_shape: tuple[int, int] = (13, 13)
+    field_arrow_max_length_m: float = 0.004
+    field_arrow_scale_percentile: float = 95.0
     log_charge_density: bool = False
     log_potential_slice: bool = True
     potential_color_percentile: float = 99.0
@@ -60,6 +63,12 @@ class VisualizationConfig:
             raise ValueError("a recording_path is required for file visualization")
         if not 0.0 < self.potential_color_percentile <= 100.0:
             raise ValueError("potential_color_percentile must be in (0, 100]")
+        if min(self.field_vector_grid_shape) < 2:
+            raise ValueError("field_vector_grid_shape dimensions must be at least 2")
+        if self.field_arrow_max_length_m <= 0:
+            raise ValueError("field_arrow_max_length_m must be positive")
+        if not 0.0 < self.field_arrow_scale_percentile <= 100.0:
+            raise ValueError("field_arrow_scale_percentile must be in (0, 100]")
 
 
 @dataclass

@@ -19,6 +19,7 @@ from gyrac_pic.device import dtype_from_name
 from gyrac_pic.grid import CartesianGrid
 import torch
 from gyrac_pic.visualization.color_maps import signed_potential_rgba
+from gyrac_pic.visualization.rerun_sink import RerunSink
 
 
 def test_sparse_grid_uses_real_grid_nodes_and_domain_bounds():
@@ -59,10 +60,11 @@ def test_signed_potential_colormap_is_blue_white_red():
 def test_cylinder_mesh_respects_radius_and_length():
     radius, length, segments = 0.25, 0.8, 16
     vertices, triangles, colors = _cylinder_mesh(radius, length, segments)
-    assert len(vertices) == 2 * segments + 2
-    assert len(triangles) == 4 * segments
+    assert len(vertices) == 2 * segments
+    assert len(triangles) == 2 * segments
     assert len(colors) == len(vertices)
-    for x, y, z in vertices[:-2]:
+    assert all(color[3] < 255 for color in colors)
+    for x, y, z in vertices:
         assert math.isclose(math.hypot(x, y), radius, rel_tol=1e-12)
         assert math.isclose(abs(z), length / 2, rel_tol=1e-12)
 
@@ -97,6 +99,21 @@ def test_parameter_table_includes_values_and_explicit_units():
     assert "Configured RF E amplitude" in table and "V/m" in table
     assert "Resonator mode" in table and "TE111_rotating_analytic" in table
     assert "Initial central magnetic field" in table and "| T |" in table
+    assert "Transverse E-field sampling" in table
+    assert "Self-field arrows" in table and "RF-field arrows" in table
+    assert "visualization only" in table
+
+
+def test_field_arrow_scaling_preserves_direction_and_caps_length():
+    field = torch.tensor([[3.0, 4.0, 0.0], [0.0, 0.0, 0.0]])
+    vectors, reference = RerunSink._scaled_arrow_vectors(
+        field, max_length_m=0.004, percentile=100.0
+    )
+    assert math.isclose(reference, 5.0)
+    assert torch.allclose(
+        torch.linalg.vector_norm(vectors, dim=-1), torch.tensor([0.004, 0.0])
+    )
+    assert torch.allclose(vectors[0] / 0.004, field[0] / 5.0)
 
 
 def test_text_failure_does_not_suppress_grid_geometry():

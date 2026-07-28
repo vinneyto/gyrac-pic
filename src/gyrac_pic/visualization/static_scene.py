@@ -98,8 +98,6 @@ def _cylinder_mesh(radius, length, segments=96):
     vertices = []
     for z in (-half, half):
         vertices.extend(_circle(radius, z, segments)[:-1])
-    vertices.extend([[0.0, 0.0, -half], [0.0, 0.0, half]])
-    lower_center, upper_center = 2 * segments, 2 * segments + 1
     triangles = []
     for i in range(segments):
         following = (i + 1) % segments
@@ -108,11 +106,9 @@ def _cylinder_mesh(radius, length, segments=96):
         triangles.extend(
             [[lower_i, lower_next, upper_next], [lower_i, upper_next, upper_i]]
         )
-        triangles.append([lower_center, lower_next, lower_i])
-        triangles.append([upper_center, upper_i, upper_next])
-    colors = [[70, 150, 255, 42]] * (2 * segments) + [
-        [70, 150, 255, 25], [70, 150, 255, 25]
-    ]
+    # Only the thin side shell is filled. Open ends plus low alpha keep the
+    # particles, local grid, and field arrows visible through the resonator.
+    colors = [[70, 150, 255, 24]] * (2 * segments)
     return vertices, triangles, colors
 
 
@@ -139,6 +135,23 @@ def _parameter_table(domain, grid, modules, config):
         ("Potential image plane", f"z = {potential_plane_z:.6g}", "m"),
         ("Potential image color", "blue / white / red", "negative / zero / positive V"),
         ("Potential image range", f"symmetric {config.visualization.potential_color_percentile:g}th percentile", "V"),
+        (
+            "Transverse E-field sampling",
+            " × ".join(map(str, config.visualization.field_vector_grid_shape)),
+            "sample points in the z≈0 plane",
+        ),
+        ("Self-field arrows", "blue", "E direction; magnitude scaled from V/m"),
+        ("RF-field arrows", "orange", "E direction; magnitude scaled from V/m"),
+        (
+            "Maximum displayed E-arrow length",
+            f"{config.visualization.field_arrow_max_length_m:.6g}",
+            "m (visualization only)",
+        ),
+        (
+            "E-arrow reference magnitude",
+            f"{config.visualization.field_arrow_scale_percentile:g}th percentile",
+            "V/m",
+        ),
     ]
     for species in config.species:
         label = species.name.capitalize()
