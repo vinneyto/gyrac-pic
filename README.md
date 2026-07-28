@@ -44,6 +44,9 @@ uv run python experiments/05_validated_te111_autoresonance.py
 По умолчанию он выполняет 10 000 шагов и сохраняет уникальные `run.rrd`,
 `final.pt` и `summary.json` в `runs/validated_te111/<UTC timestamp>/`. Для
 анализа достаточно прислать строку `GYRAC_SUMMARY` или этот JSON-файл.
+В Rerun основные графики находятся в `/plots`, расширенные — в
+`/advanced/plots`, а индивидуальные координаты и импульсы — в
+`/tracked/plots`. Для них автоматически создаются отдельные Time Series views.
 
 `.rrd` содержит только визуализацию; физическое продолжение выполняется из
 `.pt` checkpoint. Физический ramp 100 μs при стандартном шаге требует примерно

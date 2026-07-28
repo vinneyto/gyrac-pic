@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import torch
@@ -195,12 +196,16 @@ class AdvancedDiagnosticsCollector:
             return
         try:
             rr = sink.rr
+            sink.set_time(
+                self.experiment.state.step,
+                self.experiment.state.time_s,
+            )
             for key in (
                 "electron_mean_energy_ev", "self_field_energy_j",
                 "cumulative_rf_work_j", "relative_energy_balance_error",
                 "rf_e_rms_at_electrons_v_per_m", "electron_radial_rms_m",
             ):
-                rr.log(f"advanced/{key}", rr.Scalars(sample[key]))
+                sink.log_scalar(f"advanced/plots/{key}", sample[key])
             positions = self.experiment.state.species["electrons"].positions[
                 self._tracked_indices
             ].detach().cpu().numpy()
@@ -208,10 +213,10 @@ class AdvancedDiagnosticsCollector:
                 self._tracked_indices
             ].detach().cpu().numpy()
             for index in range(min(8, len(positions))):
-                rr.log(f"tracked/e{index}/x_m", rr.Scalars(float(positions[index, 0])))
-                rr.log(f"tracked/e{index}/y_m", rr.Scalars(float(positions[index, 1])))
-                rr.log(f"tracked/e{index}/px", rr.Scalars(float(momenta[index, 0])))
-                rr.log(f"tracked/e{index}/py", rr.Scalars(float(momenta[index, 1])))
+                sink.log_scalar(f"tracked/plots/e{index}/x_m", positions[index, 0])
+                sink.log_scalar(f"tracked/plots/e{index}/y_m", positions[index, 1])
+                sink.log_scalar(f"tracked/plots/e{index}/px", momenta[index, 0])
+                sink.log_scalar(f"tracked/plots/e{index}/py", momenta[index, 1])
             self._trails.append(positions)
             self._trails = self._trails[-256:]
             if len(self._trails) > 1:
@@ -220,9 +225,11 @@ class AdvancedDiagnosticsCollector:
                     for index in range(len(self._tracked_indices))
                 ]
                 rr.log("tracked/electron_trails", rr.LineStrips3D(strips, radii=2e-5))
-        except Exception:
+        except Exception as error:
             # Advanced visualization is auxiliary; JSON diagnostics remain valid.
-            return
+            logging.getLogger(__name__).warning(
+                "Could not log advanced Rerun frame: %s", error
+            )
 
     def save_summary(self, path, metadata=None):
         path = Path(path)
