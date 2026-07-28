@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gyrac-pic"
+version = "0.1.0"
+description = "GPU-oriented electrostatic particle-in-cell research model for GYRAC"
+requires-python = ">=3.10"
+dependencies = ["torch>=2.1", "numpy>=1.24", "tqdm>=4.66"]
+
+[project.optional-dependencies]
+visualization = ["rerun-sdk>=0.19"]
+notebook = ["jupyterlab>=4"]
+test = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
