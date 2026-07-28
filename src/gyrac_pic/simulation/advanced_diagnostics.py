@@ -200,12 +200,55 @@ class AdvancedDiagnosticsCollector:
                 self.experiment.state.step,
                 self.experiment.state.time_s,
             )
-            for key in (
-                "electron_mean_energy_ev", "self_field_energy_j",
-                "cumulative_rf_work_j", "relative_energy_balance_error",
-                "rf_e_rms_at_electrons_v_per_m", "electron_radial_rms_m",
-            ):
-                sink.log_scalar(f"advanced/plots/{key}", sample[key])
+            series = {
+                "advanced/energy_j/electron_kinetic": (
+                    "electron_kinetic_energy_j", "Electron kinetic energy [J]"
+                ),
+                "advanced/energy_j/proton_kinetic": (
+                    "proton_kinetic_energy_j", "Proton kinetic energy [J]"
+                ),
+                "advanced/energy_j/self_field": (
+                    "self_field_energy_j", "Self-field energy [J]"
+                ),
+                "advanced/energy_j/cumulative_rf_work": (
+                    "cumulative_rf_work_j", "Cumulative RF work [J]"
+                ),
+                "advanced/power_w/rf": (
+                    "instantaneous_rf_power_w", "Instantaneous RF power [W]"
+                ),
+                "advanced/power_w/all_external": (
+                    "instantaneous_external_power_w", "All external power [W]"
+                ),
+                "advanced/electric_field_v_per_m/rf_rms_at_electrons": (
+                    "rf_e_rms_at_electrons_v_per_m", "RF E RMS at electrons [V/m]"
+                ),
+                "advanced/electric_field_v_per_m/rf_max_at_electrons": (
+                    "rf_e_max_at_electrons_v_per_m", "RF E max at electrons [V/m]"
+                ),
+                "advanced/radius_m/electron_cloud_rms": (
+                    "electron_radial_rms_m", "Electron cloud RMS radius [m]"
+                ),
+                "advanced/radius_m/proton_cloud_rms": (
+                    "proton_radial_rms_m", "Proton cloud RMS radius [m]"
+                ),
+                "advanced/radius_m/electron_larmor_mean": (
+                    "electron_mean_larmor_radius_m", "Mean electron Larmor radius [m]"
+                ),
+                "advanced/radius_m/electron_larmor_max": (
+                    "electron_max_larmor_radius_m", "Maximum electron Larmor radius [m]"
+                ),
+                "advanced/dimensionless/energy_balance_error": (
+                    "relative_energy_balance_error", "Relative energy-balance error [1]"
+                ),
+                "advanced/dimensionless/gyro_phase_coherence": (
+                    "electron_gyro_phase_coherence", "Electron gyro-phase coherence [1]"
+                ),
+                "advanced/dimensionless/rf_envelope": (
+                    "rf_envelope", "RF ramp envelope [1]"
+                ),
+            }
+            for path, (key, legend_name) in series.items():
+                sink.log_scalar(path, sample[key], legend_name)
             positions = self.experiment.state.species["electrons"].positions[
                 self._tracked_indices
             ].detach().cpu().numpy()
@@ -213,10 +256,22 @@ class AdvancedDiagnosticsCollector:
                 self._tracked_indices
             ].detach().cpu().numpy()
             for index in range(min(8, len(positions))):
-                sink.log_scalar(f"tracked/plots/e{index}/x_m", positions[index, 0])
-                sink.log_scalar(f"tracked/plots/e{index}/y_m", positions[index, 1])
-                sink.log_scalar(f"tracked/plots/e{index}/px", momenta[index, 0])
-                sink.log_scalar(f"tracked/plots/e{index}/py", momenta[index, 1])
+                sink.log_scalar(
+                    f"tracked/plots/e{index}/x_m", positions[index, 0],
+                    f"Electron {index} x [m]",
+                )
+                sink.log_scalar(
+                    f"tracked/plots/e{index}/y_m", positions[index, 1],
+                    f"Electron {index} y [m]",
+                )
+                sink.log_scalar(
+                    f"tracked/plots/e{index}/px", momenta[index, 0],
+                    f"Electron {index} p_x [kg·m/s]",
+                )
+                sink.log_scalar(
+                    f"tracked/plots/e{index}/py", momenta[index, 1],
+                    f"Electron {index} p_y [kg·m/s]",
+                )
             self._trails.append(positions)
             self._trails = self._trails[-256:]
             if len(self._trails) > 1:

@@ -3,8 +3,18 @@ import math
 from gyrac_pic.visualization.static_scene import (
     _box_edges,
     _cylinder_mesh,
+    _parameter_table,
     _sparse_grid,
 )
+from gyrac_pic import (
+    AnalyticRotatingTE111,
+    CylindricalPECDomain,
+    RampedMirrorMagneticField,
+    make_smoke_config,
+)
+from gyrac_pic.device import dtype_from_name
+from gyrac_pic.grid import CartesianGrid
+import torch
 
 
 def test_sparse_grid_uses_real_grid_nodes_and_domain_bounds():
@@ -27,3 +37,31 @@ def test_cylinder_mesh_respects_radius_and_length():
 
 def test_box_has_twelve_edges():
     assert len(_box_edges(((-1, 1), (-1, 1), (-1, 1)))) == 12
+
+
+def test_parameter_table_includes_values_and_explicit_units():
+    config = make_smoke_config()
+    domain = CylindricalPECDomain(
+        config.resonator.radius_m, config.resonator.length_m, config.grid.shape
+    )
+    grid = CartesianGrid(
+        config.grid.shape, domain.bounds, torch.device("cpu"),
+        dtype_from_name(config.grid.dtype_name),
+    )
+    resonator = AnalyticRotatingTE111(
+        config.resonator.radius_m, config.resonator.length_m,
+        config.resonator.frequency_hz,
+        config.resonator.electric_field_amplitude_v_per_m,
+    )
+    magnet = RampedMirrorMagneticField(
+        config.magnetic_field.B0_tesla,
+        config.magnetic_field.delta_B_max_tesla,
+        config.magnetic_field.ramp_time_s,
+        config.magnetic_field.mirror_ratio,
+        config.resonator.length_m,
+    )
+    table = _parameter_table(domain, grid, [resonator, magnet], config)
+    assert "RF frequency" in table and "Hz" in table
+    assert "Configured RF E amplitude" in table and "V/m" in table
+    assert "Resonator mode" in table and "TE111_rotating_analytic" in table
+    assert "Initial central magnetic field" in table and "| T |" in table

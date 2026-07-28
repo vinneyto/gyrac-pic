@@ -76,8 +76,80 @@ def _cylinder_mesh(radius, length, segments=96):
     return vertices, triangles, colors
 
 
+def _parameter_table(domain, grid, modules, config):
+    rows = [
+        ("Recording / experiment ID", config.name, "—"),
+        ("Compute device", str(grid.device), "—"),
+        ("Floating-point dtype", str(grid.dtype).removeprefix("torch."), "—"),
+        ("Timestep", f"{config.dt_s:.6g}", "s"),
+        ("Configured steps", f"{config.num_steps}", "steps"),
+        ("Grid shape", " × ".join(map(str, grid.shape)), "nodes"),
+        ("Grid spacing dx", f"{grid.spacing[0]:.6g}", "m"),
+        ("Grid spacing dy", f"{grid.spacing[1]:.6g}", "m"),
+        ("Grid spacing dz", f"{grid.spacing[2]:.6g}", "m"),
+        ("Domain x bounds", f"{domain.bounds[0][0]:.6g} … {domain.bounds[0][1]:.6g}", "m"),
+        ("Domain y bounds", f"{domain.bounds[1][0]:.6g} … {domain.bounds[1][1]:.6g}", "m"),
+        ("Domain z bounds", f"{domain.bounds[2][0]:.6g} … {domain.bounds[2][1]:.6g}", "m"),
+        ("Poisson tolerance", f"{config.poisson.relative_tolerance:.3g}", "relative [1]"),
+        ("Poisson solve stride", f"{config.poisson.solve_stride}", "steps"),
+    ]
+    for species in config.species:
+        label = species.name.capitalize()
+        rows.extend(
+            [
+                (f"{label} macroparticles", f"{species.count}", "count"),
+                (f"{label} density", f"{species.density_m3:.6g}", "m⁻³"),
+                (f"{label} temperature", f"{species.temperature_ev:.6g}", "eV"),
+            ]
+        )
+    resonators = [m for m in modules if "resonator" in m.scene_renderers()]
+    if resonators:
+        resonator = resonators[0]
+        metadata = resonator.metadata()
+        rows.extend(
+            [
+                ("Resonator mode", str(metadata.get("mode", type(resonator).__name__)), "—"),
+                ("RF frequency", f"{resonator.frequency_hz:.9g}", "Hz"),
+                ("RF angular frequency", f"{resonator.omega:.9g}", "rad/s"),
+                ("Configured RF E amplitude", f"{resonator.E0:.9g}", "V/m"),
+                ("RF ramp", f"{resonator.rf_ramp_cycles}", "RF cycles"),
+                ("Resonator radius", f"{resonator.radius_m:.9g}", "m"),
+                ("Resonator length", f"{resonator.length_m:.9g}", "m"),
+            ]
+        )
+    magnets = [m for m in modules if "magnets" in m.scene_renderers()]
+    if magnets:
+        magnetic = magnets[0]
+        rows.extend(
+            [
+                ("Initial central magnetic field", f"{magnetic.B0:.9g}", "T"),
+                ("Maximum magnetic-field increment", f"{magnetic.delta:.9g}", "T"),
+                ("Magnetic ramp time", f"{magnetic.ramp_time_s:.9g}", "s"),
+                ("Mirror ratio", f"{magnetic.mirror_ratio:.9g}", "B_end/B_mid [1]"),
+            ]
+        )
+    lines = [
+        f"# GYRAC experiment: `{config.name}`",
+        "",
+        "> This Viewer tab represents one recording. Other runs are separate `.rrd` recordings.",
+        "",
+        "| Parameter | Value | Unit |",
+        "|---|---:|---|",
+    ]
+    lines.extend(f"| {name} | {value} | {unit} |" for name, value, unit in rows)
+    return "\n".join(lines)
+
+
 def log_static_scene(rr, domain, grid, modules, config):
     """Log only geometry implied by the actual domain and attached modules."""
+    rr.log(
+        "experiment/parameters",
+        rr.TextDocument(
+            _parameter_table(domain, grid, modules, config),
+            media_type="text/markdown",
+        ),
+        static=True,
+    )
     if config.log_grid:
         rr.log(
             "scene/computational_grid",
