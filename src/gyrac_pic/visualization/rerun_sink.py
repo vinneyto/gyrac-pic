@@ -3,6 +3,8 @@ import importlib
 import importlib.util
 import logging
 
+from .static_scene import log_static_scene
+
 log = logging.getLogger(__name__)
 
 
@@ -10,6 +12,7 @@ class RerunSink:
     """Optional Rerun adapter; viewer disconnects never stop the simulation."""
     def __init__(self, config, recording_id):
         self.config, self.recording_id, self.rr, self.connected = config, recording_id, None, False
+        self._static_logged = False
 
     def initialize(self):
         if self.config.mode == "disabled" or self.connected:
@@ -63,6 +66,16 @@ class RerunSink:
             log.warning("Rerun connection lost; disabling live output: %s", error)
             self.connected = False
 
+    def log_static_scene(self, domain, grid, modules):
+        self.initialize()
+        if not self.connected or self._static_logged:
+            return
+        try:
+            log_static_scene(self.rr, domain, grid, modules, self.config)
+            self._static_logged = True
+        except Exception as error:
+            log.warning("Could not log static Rerun scene: %s", error)
+
     def log_scalar(self, path, value):
         """Log a one-element scalar batch to a leaf entity path."""
         self.rr.log(path, self.rr.Scalars([float(value)]))
@@ -95,4 +108,5 @@ class RerunSink:
 
     def reset(self):
         self.connected = False
+        self._static_logged = False
         self.initialize()
