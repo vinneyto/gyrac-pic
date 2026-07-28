@@ -83,12 +83,19 @@ class RerunSink:
             log.warning("Rerun connection lost; disabling live output: %s", error)
             self.connected = False
 
-    def log_static_scene(self, domain, grid, modules):
+    def log_static_scene(self, domain, grid, modules, experiment_config):
         self.initialize()
         if not self.connected or self._static_logged:
             return
         try:
-            log_static_scene(self.rr, domain, grid, modules, self.config)
+            log_static_scene(
+                self.rr,
+                domain,
+                grid,
+                modules,
+                self.config,
+                experiment_config,
+            )
             self._static_logged = True
         except Exception as error:
             log.warning("Could not log static Rerun scene: %s", error)
@@ -119,16 +126,6 @@ class RerunSink:
             return
         try:
             rrb = rr.blueprint
-            plots = rrb.Vertical(
-                rrb.TimeSeriesView(name="Particle energy [eV]", origin="/plots/energy_ev"),
-                rrb.TimeSeriesView(name="Particle count [count]", origin="/plots/particle_count"),
-                rrb.TimeSeriesView(name="Poisson convergence [1]", origin="/plots/solver"),
-                rrb.TimeSeriesView(name="Energy accounting [J]", origin="/advanced/energy_j"),
-                rrb.TimeSeriesView(name="External power [W]", origin="/advanced/power_w"),
-                rrb.TimeSeriesView(name="RF electric field [V/m]", origin="/advanced/electric_field_v_per_m"),
-                rrb.TimeSeriesView(name="Particle radii [m]", origin="/advanced/radius_m"),
-                rrb.TimeSeriesView(name="Dimensionless validation", origin="/advanced/dimensionless"),
-            )
             blueprint = rrb.Blueprint(
                 rrb.Horizontal(
                     rrb.Vertical(
@@ -138,7 +135,10 @@ class RerunSink:
                         ),
                         row_shares=[3, 2],
                     ),
-                    plots,
+                    rrb.TimeSeriesView(
+                        name="Particle energy [eV]",
+                        origin="/plots/energy_ev",
+                    ),
                     column_shares=[3, 2],
                 ),
                 collapse_panels=True,

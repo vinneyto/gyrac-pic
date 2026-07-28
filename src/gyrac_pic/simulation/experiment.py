@@ -164,7 +164,9 @@ class Experiment:
 
     def visualize_initial_state(self):
         if self.state is None: raise RuntimeError("call initialize() before visualization")
-        self.visualizer.log_static_scene(self.domain, self.grid, self.modules)
+        self.visualizer.log_static_scene(
+            self.domain, self.grid, self.modules, self.config
+        )
         self.visualizer.log_frame(self.state,self.latest_diagnostics,self.config.visualization.max_particles_per_species)
 
     def reset_visualization_recording(self): self.visualizer.reset()

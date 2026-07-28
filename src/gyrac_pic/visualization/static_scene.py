@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import math
+import logging
 
 import numpy as np
+
+
+log = logging.getLogger(__name__)
 
 
 def _circle(radius, z, segments=96):
@@ -140,33 +144,33 @@ def _parameter_table(domain, grid, modules, config):
     return "\n".join(lines)
 
 
-def log_static_scene(rr, domain, grid, modules, config):
+def log_static_scene(rr, domain, grid, modules, visualization_config, experiment_config):
     """Log only geometry implied by the actual domain and attached modules."""
-    rr.log(
-        "experiment/parameters",
-        rr.TextDocument(
-            _parameter_table(domain, grid, modules, config),
-            media_type="text/markdown",
-        ),
-        static=True,
-    )
-    if config.log_grid:
-        rr.log(
+    def safe_log(path, archetype_factory):
+        # One unsupported Rerun archetype must not prevent all remaining static
+        # geometry from reaching the viewer.
+        try:
+            rr.log(path, archetype_factory(), static=True)
+            return True
+        except Exception as error:
+            log.warning("Could not log static Rerun entity %s: %s", path, error)
+            return False
+
+    if visualization_config.log_grid:
+        safe_log(
             "scene/computational_grid",
-            rr.LineStrips3D(
+            lambda: rr.LineStrips3D(
                 _sparse_grid(domain.bounds, grid.shape),
                 colors=[125, 135, 150, 35],
                 radii=1.5e-5,
             ),
-            static=True,
         )
-    if config.log_domain:
-        rr.log(
+    if visualization_config.log_domain:
+        safe_log(
             "scene/domain_bounds",
-            rr.LineStrips3D(
+            lambda: rr.LineStrips3D(
                 _box_edges(domain.bounds), colors=[180, 190, 205, 120], radii=4e-5
             ),
-            static=True,
         )
 
     renderer_hints = {
@@ -179,34 +183,31 @@ def log_static_scene(rr, domain, grid, modules, config):
         vertices, triangles, colors = _cylinder_mesh(
             resonator.radius_m, resonator.length_m
         )
-        rr.log(
+        safe_log(
             "scene/resonator/pec_cavity",
-            rr.Mesh3D(
+            lambda: rr.Mesh3D(
                 vertex_positions=vertices,
                 triangle_indices=triangles,
                 vertex_colors=colors,
             ),
-            static=True,
         )
-        rr.log(
+        safe_log(
             "scene/resonator/rims",
-            rr.LineStrips3D(
+            lambda: rr.LineStrips3D(
                 [_circle(resonator.radius_m, -resonator.length_m / 2),
                  _circle(resonator.radius_m, resonator.length_m / 2)],
                 colors=[75, 165, 255, 210],
                 radii=1.5e-4,
             ),
-            static=True,
         )
-        rr.log(
+        safe_log(
             "scene/resonator/axis",
-            rr.LineStrips3D(
+            lambda: rr.LineStrips3D(
                 [[[0, 0, -resonator.length_m / 2],
                   [0, 0, resonator.length_m / 2]]],
                 colors=[225, 225, 235, 150],
                 radii=5e-5,
             ),
-            static=True,
         )
 
     if "magnets" in renderer_hints:
@@ -219,20 +220,31 @@ def log_static_scene(rr, domain, grid, modules, config):
             for sign in (-1, 1)
             for offset in range(-2, 3)
         ]
-        rr.log(
+        safe_log(
             "scene/magnets/coils",
-            rr.LineStrips3D(
+            lambda: rr.LineStrips3D(
                 coils, colors=[235, 125, 35, 255], radii=7.5e-4
             ),
-            static=True,
         )
-        rr.log(
+        safe_log(
             "scene/magnets/field_direction",
-            rr.Arrows3D(
+            lambda: rr.Arrows3D(
                 origins=[[0, 0, -magnetic.length * 0.3]],
                 vectors=[[0, 0, magnetic.length * 0.6]],
                 colors=[255, 205, 55, 220],
                 radii=2.5e-4,
             ),
-            static=True,
         )
+
+    media_type = (
+        rr.MediaType.MARKDOWN
+        if hasattr(rr, "MediaType") and hasattr(rr.MediaType, "MARKDOWN")
+        else "text/markdown"
+    )
+    safe_log(
+        "experiment/parameters",
+        lambda: rr.TextDocument(
+            _parameter_table(domain, grid, modules, experiment_config),
+            media_type=media_type,
+        ),
+    )

@@ -5,9 +5,11 @@ from gyrac_pic.visualization.static_scene import (
     _cylinder_mesh,
     _parameter_table,
     _sparse_grid,
+    log_static_scene,
 )
 from gyrac_pic import (
     AnalyticRotatingTE111,
+    BoxDomain,
     CylindricalPECDomain,
     RampedMirrorMagneticField,
     make_smoke_config,
@@ -65,3 +67,35 @@ def test_parameter_table_includes_values_and_explicit_units():
     assert "Configured RF E amplitude" in table and "V/m" in table
     assert "Resonator mode" in table and "TE111_rotating_analytic" in table
     assert "Initial central magnetic field" in table and "| T |" in table
+
+
+def test_text_failure_does_not_suppress_grid_geometry():
+    class FakeRerun:
+        def __init__(self):
+            self.paths = []
+
+        def LineStrips3D(self, *args, **kwargs):
+            return (args, kwargs)
+
+        def TextDocument(self, *args, **kwargs):
+            raise TypeError("unsupported text document")
+
+        def log(self, path, archetype, static=False):
+            assert static
+            self.paths.append(path)
+
+    config = make_smoke_config()
+    domain = BoxDomain(
+        (-0.05, 0.05), (-0.05, 0.05), (-0.05, 0.05), config.grid.shape
+    )
+    grid = CartesianGrid(
+        config.grid.shape, domain.bounds, torch.device("cpu"), torch.float32
+    )
+    rerun = FakeRerun()
+    log_static_scene(
+        rerun, domain, grid, modules=[],
+        visualization_config=config.visualization,
+        experiment_config=config,
+    )
+    assert "scene/computational_grid" in rerun.paths
+    assert "scene/domain_bounds" in rerun.paths
