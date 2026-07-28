@@ -11,6 +11,17 @@ from ..particles import gather_field_cic
 
 log = logging.getLogger(__name__)
 
+# Keep 2D images and scalar/text entities out of the 3D view. If the 3D view
+# recursively includes `/`, Rerun tries to show the potential image there and
+# correctly warns that an Image needs a pinhole transform in a 3D view.
+SPATIAL_3D_CONTENTS = (
+    "/scene/**",
+    "/particles/**",
+    "/tracked/**",
+    "/fields/self_electric/transverse_arrows",
+    "/fields/rf_electric/transverse_arrows",
+)
+
 
 class RerunSink:
     """Optional Rerun adapter; viewer disconnects never stop the simulation."""
@@ -243,7 +254,11 @@ class RerunSink:
             blueprint = rrb.Blueprint(
                 rrb.Horizontal(
                     rrb.Vertical(
-                        rrb.Spatial3DView(name="GYRAC 3D scene", origin="/"),
+                        rrb.Spatial3DView(
+                            name="GYRAC 3D scene",
+                            origin="/",
+                            contents=list(SPATIAL_3D_CONTENTS),
+                        ),
                         rrb.Horizontal(
                             rrb.TextDocumentView(
                                 name="Experiment parameters",

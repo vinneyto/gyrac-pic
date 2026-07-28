@@ -19,7 +19,7 @@ from gyrac_pic.device import dtype_from_name
 from gyrac_pic.grid import CartesianGrid
 import torch
 from gyrac_pic.visualization.color_maps import signed_potential_rgba
-from gyrac_pic.visualization.rerun_sink import RerunSink
+from gyrac_pic.visualization.rerun_sink import RerunSink, SPATIAL_3D_CONTENTS
 
 
 def test_sparse_grid_uses_real_grid_nodes_and_domain_bounds():
@@ -114,6 +114,12 @@ def test_field_arrow_scaling_preserves_direction_and_caps_length():
         torch.linalg.vector_norm(vectors, dim=-1), torch.tensor([0.004, 0.0])
     )
     assert torch.allclose(vectors[0] / 0.004, field[0] / 5.0)
+
+
+def test_3d_view_does_not_include_the_2d_potential_image():
+    assert "/scene/**" in SPATIAL_3D_CONTENTS
+    assert "/particles/**" in SPATIAL_3D_CONTENTS
+    assert not any("potential_midplane_z" in path for path in SPATIAL_3D_CONTENTS)
 
 
 def test_text_failure_does_not_suppress_grid_geometry():
