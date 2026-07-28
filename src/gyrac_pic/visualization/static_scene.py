@@ -57,6 +57,42 @@ def _sparse_grid(bounds, shape, maximum_lines_per_axis=11):
     return strips
 
 
+def _local_actual_grid(bounds, shape, plasma):
+    """Return every real grid line in a patch enclosing the initial plasma."""
+    node_axes = [
+        np.linspace(low, high, count)
+        for (low, high), count in zip(bounds, shape)
+    ]
+    requested_bounds = (
+        (-1.5 * plasma.radius_m, 1.5 * plasma.radius_m),
+        (-1.5 * plasma.radius_m, 1.5 * plasma.radius_m),
+        (
+            plasma.center_z_m - plasma.length_m / 2,
+            plasma.center_z_m + plasma.length_m / 2,
+        ),
+    )
+    selected_axes = []
+    for nodes, (requested_low, requested_high) in zip(node_axes, requested_bounds):
+        inside = np.flatnonzero((nodes >= requested_low) & (nodes <= requested_high))
+        if len(inside) == 0:
+            inside = np.array([int(np.argmin(np.abs(nodes - (requested_low + requested_high) / 2)))])
+        first = max(int(inside[0]) - 1, 0)
+        last = min(int(inside[-1]) + 1, len(nodes) - 1)
+        selected_axes.append(nodes[first:last + 1].tolist())
+    xs, ys, zs = selected_axes
+    strips = []
+    for x in xs:
+        for y in ys:
+            strips.append([[x, y, zs[0]], [x, y, zs[-1]]])
+    for x in xs:
+        for z in zs:
+            strips.append([[x, ys[0], z], [x, ys[-1], z]])
+    for y in ys:
+        for z in zs:
+            strips.append([[xs[0], y, z], [xs[-1], y, z]])
+    return strips, selected_axes
+
+
 def _cylinder_mesh(radius, length, segments=96):
     half = length / 2
     vertices = []
@@ -96,6 +132,8 @@ def _parameter_table(domain, grid, modules, config):
         ("Domain z bounds", f"{domain.bounds[2][0]:.6g} … {domain.bounds[2][1]:.6g}", "m"),
         ("Poisson tolerance", f"{config.poisson.relative_tolerance:.3g}", "relative [1]"),
         ("Poisson solve stride", f"{config.poisson.solve_stride}", "steps"),
+        ("Global grid display", "at most 11 nodes per axis", "visualization only"),
+        ("Local plasma grid display", "every computational node", "actual cells"),
     ]
     for species in config.species:
         label = species.name.capitalize()
@@ -158,11 +196,22 @@ def log_static_scene(rr, domain, grid, modules, visualization_config, experiment
 
     if visualization_config.log_grid:
         safe_log(
-            "scene/computational_grid",
+            "scene/grid/global_sparse",
             lambda: rr.LineStrips3D(
                 _sparse_grid(domain.bounds, grid.shape),
-                colors=[125, 135, 150, 35],
+                colors=[125, 135, 150, 24],
                 radii=1.5e-5,
+            ),
+        )
+        local_strips, _ = _local_actual_grid(
+            domain.bounds, grid.shape, experiment_config.plasma
+        )
+        safe_log(
+            "scene/grid/local_actual_cells",
+            lambda: rr.LineStrips3D(
+                local_strips,
+                colors=[80, 225, 235, 105],
+                radii=2.5e-5,
             ),
         )
     if visualization_config.log_domain:

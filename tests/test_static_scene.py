@@ -4,6 +4,7 @@ from gyrac_pic.visualization.static_scene import (
     _box_edges,
     _cylinder_mesh,
     _parameter_table,
+    _local_actual_grid,
     _sparse_grid,
     log_static_scene,
 )
@@ -24,6 +25,26 @@ def test_sparse_grid_uses_real_grid_nodes_and_domain_bounds():
     strips = _sparse_grid(bounds, (5, 7, 9), maximum_lines_per_axis=3)
     assert len(strips) == 27
     assert strips[0] == [[-1.0, -2.0, -3.0], [-1.0, -2.0, 3.0]]
+
+
+def test_local_grid_patch_draws_every_selected_computational_node():
+    config = make_smoke_config()
+    bounds = (
+        (-config.resonator.radius_m, config.resonator.radius_m),
+        (-config.resonator.radius_m, config.resonator.radius_m),
+        (-config.resonator.length_m / 2, config.resonator.length_m / 2),
+    )
+    strips, axes = _local_actual_grid(bounds, config.grid.shape, config.plasma)
+    assert len(strips) == (
+        len(axes[0]) * len(axes[1])
+        + len(axes[0]) * len(axes[2])
+        + len(axes[1]) * len(axes[2])
+    )
+    for coordinates, (low, high), count in zip(axes, bounds, config.grid.shape):
+        spacing = (high - low) / (count - 1)
+        for coordinate in coordinates:
+            node_index = (coordinate - low) / spacing
+            assert math.isclose(node_index, round(node_index), abs_tol=1e-10)
 
 
 def test_cylinder_mesh_respects_radius_and_length():
@@ -97,5 +118,6 @@ def test_text_failure_does_not_suppress_grid_geometry():
         visualization_config=config.visualization,
         experiment_config=config,
     )
-    assert "scene/computational_grid" in rerun.paths
+    assert "scene/grid/global_sparse" in rerun.paths
+    assert "scene/grid/local_actual_cells" in rerun.paths
     assert "scene/domain_bounds" in rerun.paths
