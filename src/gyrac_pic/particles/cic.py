@@ -13,10 +13,17 @@ def _coordinates(positions, bounds, shape):
 
 
 def deposit_charge_cic(positions, charges, shape, bounds, *, alive=None):
-    base, frac = _coordinates(positions, bounds, shape)
     if alive is not None:
-        charges = charges * alive.to(charges.dtype)
+        # Filtering must happen before coordinate/weight evaluation: multiplying
+        # a dead particle's charge by zero does not neutralize a NaN position.
+        positions = positions[alive]
+        charges = charges[alive]
     flat = torch.zeros(shape[0] * shape[1] * shape[2], device=positions.device, dtype=positions.dtype)
+    if positions.numel() == 0:
+        return flat.reshape(shape)
+    if not torch.isfinite(positions).all() or not torch.isfinite(charges).all():
+        raise FloatingPointError("CIC deposition received non-finite live particle data")
+    base, frac = _coordinates(positions, bounds, shape)
     for ox, oy, oz in itertools.product((0, 1), repeat=3):
         offset = positions.new_tensor((ox, oy, oz), dtype=torch.long)
         idx = base + offset

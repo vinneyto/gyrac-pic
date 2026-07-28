@@ -44,3 +44,40 @@ def test_nonrelativistic_kinetic_energy_is_stable_in_float32():
     momentum = torch.tensor([[ELECTRON_MASS * speed, 0.0, 0.0]], dtype=torch.float32)
     actual_ev = kinetic_energy(momentum, ELECTRON_MASS) / ELEMENTARY_CHARGE
     assert torch.allclose(actual_ev, torch.tensor([expected_ev]), rtol=1e-5)
+
+
+def test_physical_electron_momentum_remains_finite_in_float32():
+    speed = torch.tensor([[2.0e6, 0.0, 0.0]], dtype=torch.float32)
+    momentum = speed * ELECTRON_MASS
+    position = torch.zeros_like(momentum)
+    zero = torch.zeros_like(momentum)
+    new_position, new_momentum = relativistic_boris_push(
+        position, momentum, zero, zero, -ELEMENTARY_CHARGE, ELECTRON_MASS, 0.8e-12
+    )
+    assert torch.isfinite(new_position).all()
+    assert torch.isfinite(new_momentum).all()
+    assert new_position[0, 0] > 0
+
+
+def test_dead_nan_particle_does_not_contaminate_cic_grid():
+    positions = torch.tensor([[float("nan"), 0.0, 0.0], [0.0, 0.0, 0.0]])
+    charges = torch.tensor([1.0, 2.0])
+    alive = torch.tensor([False, True])
+    shape = (4, 4, 4)
+    bounds = ((-1.0, 1.0),) * 3
+    rho = deposit_charge_cic(positions, charges, shape, bounds, alive=alive)
+    cell_volume = (2.0 / 3.0) ** 3
+    assert torch.isfinite(rho).all()
+    assert torch.allclose(rho.sum() * cell_volume, torch.tensor(2.0))
+
+
+def test_pcg_rejects_nonfinite_rhs():
+    rhs = torch.zeros((4, 4, 4))
+    rhs[1, 1, 1] = float("nan")
+    mask = torch.ones_like(rhs, dtype=torch.bool)
+    try:
+        solve_pcg(rhs, mask, (1.0, 1.0, 1.0))
+    except FloatingPointError as error:
+        assert "right-hand side" in str(error)
+    else:
+        raise AssertionError("PCG accepted a non-finite right-hand side")

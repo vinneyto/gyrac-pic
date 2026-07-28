@@ -16,6 +16,10 @@ class PoissonSolveInfo:
 
 def solve_pcg(b, mask, spacing, initial_guess=None, relative_tolerance=1e-5, absolute_tolerance=0.0, max_iterations=200):
     start = perf_counter()
+    if not torch.isfinite(b).all():
+        raise FloatingPointError("PCG right-hand side contains non-finite values")
+    if initial_guess is not None and not torch.isfinite(initial_guess).all():
+        raise FloatingPointError("PCG initial guess contains non-finite values")
     x = torch.zeros_like(b) if initial_guess is None else initial_guess.clone() * mask
     apply = lambda value: apply_negative_laplacian(value, mask, spacing)
     r = (b - apply(x)) * mask
@@ -40,6 +44,8 @@ def solve_pcg(b, mask, spacing, initial_guess=None, relative_tolerance=1e-5, abs
         alpha = rz / denominator
         x += alpha * p
         r -= alpha * ap
+        if not torch.isfinite(x).all() or not torch.isfinite(r).all():
+            raise FloatingPointError(f"PCG produced non-finite values at iteration {iterations}")
         final = torch.linalg.vector_norm(r)
         if float(final) <= threshold:
             converged = True
@@ -48,4 +54,7 @@ def solve_pcg(b, mask, spacing, initial_guess=None, relative_tolerance=1e-5, abs
         rz_new = torch.sum(r * z)
         p = z + (rz_new / rz) * p
         rz = rz_new
-    return x * mask, PoissonSolveInfo(converged, iterations, float(initial), float(final), float(final/max(b_norm, tiny)), perf_counter()-start)
+    solution = x * mask
+    if not torch.isfinite(solution).all():
+        raise FloatingPointError("PCG returned a non-finite solution")
+    return solution, PoissonSolveInfo(converged, iterations, float(initial), float(final), float(final/max(b_norm, tiny)), perf_counter()-start)

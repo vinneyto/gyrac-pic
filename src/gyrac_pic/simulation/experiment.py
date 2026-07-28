@@ -50,6 +50,10 @@ class Experiment:
             speed2 = (velocity*velocity).sum(-1, keepdim=True)
             gamma = 1/torch.sqrt(1-speed2/SPEED_OF_LIGHT**2)
             momentum = gamma*spec.physical_mass_kg*velocity
+            if not torch.isfinite(momentum).all():
+                raise FloatingPointError(
+                    f"non-finite initial momentum for species {spec.name}"
+                )
             weight = spec.density_m3*volume/spec.count
             species[spec.name] = ParticleSpeciesState(spec.name, pos, momentum, torch.ones(spec.count,device=self.device,dtype=torch.bool),
                 spec.physical_charge_c, spec.physical_mass_kg, weight, weight*spec.physical_charge_c, weight*spec.physical_mass_kg)
@@ -72,6 +76,10 @@ class Experiment:
             field = negative_gradient(phi, self.grid.spacing, self.mask)
         else:
             phi, field, info = torch.zeros_like(rho), torch.zeros((*rho.shape,3),device=self.device,dtype=self.dtype), None
+        if not torch.isfinite(phi).all() or not torch.isfinite(field).all():
+            raise FloatingPointError(
+                f"non-finite self-consistent field at step {self.state.step}"
+            )
         self.state.grid = GridState(rho, phi, field); self._last_solve = info
 
     def step(self):
@@ -83,6 +91,14 @@ class Experiment:
                 e += module.electric_field(s.positions, field_time)
                 b += module.magnetic_field(s.positions, field_time)
             new_pos, new_mom = relativistic_boris_push(s.positions, s.momenta, e, b, s.physical_charge_c, s.physical_mass_kg, self.config.dt_s)
+            live_result = s.alive[:, None]
+            if (
+                not torch.isfinite(new_pos[live_result.expand_as(new_pos)]).all()
+                or not torch.isfinite(new_mom[live_result.expand_as(new_mom)]).all()
+            ):
+                raise FloatingPointError(
+                    f"non-finite Boris result for species {s.name} at step {self.state.step}"
+                )
             moving = s.alive[:,None]
             s.positions = torch.where(moving, new_pos, s.positions); s.momenta = torch.where(moving, new_mom, s.momenta)
             newly_lost = s.alive & ~self.domain.particle_inside(s.positions)
