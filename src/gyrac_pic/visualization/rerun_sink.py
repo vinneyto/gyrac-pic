@@ -4,6 +4,7 @@ import importlib.util
 import logging
 
 from .static_scene import log_static_scene
+from .color_maps import signed_potential_rgba
 
 log = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ class RerunSink:
         self.config, self.recording_id, self.rr, self.connected = config, recording_id, None, False
         self._static_logged = False
         self._registered_series = set()
+        self._grid = None
 
     def initialize(self):
         if self.config.mode == "disabled" or self.connected:
@@ -79,6 +81,7 @@ class RerunSink:
                 diagnostics.poisson_relative_residual,
                 "Poisson relative residual [1]",
             )
+            self._log_potential_slice(state)
         except Exception as error:
             log.warning("Rerun connection lost; disabling live output: %s", error)
             self.connected = False
@@ -88,6 +91,7 @@ class RerunSink:
         if not self.connected or self._static_logged:
             return
         try:
+            self._grid = grid
             log_static_scene(
                 self.rr,
                 domain,
@@ -99,6 +103,33 @@ class RerunSink:
             self._static_logged = True
         except Exception as error:
             log.warning("Could not log static Rerun scene: %s", error)
+
+    def _log_potential_slice(self, state):
+        if not self.config.log_potential_slice or self._grid is None:
+            return
+        try:
+            z_coordinates = self._grid.coordinates()[2]
+            middle_index = int(z_coordinates.abs().argmin())
+            # Rerun image rows are y and columns are x, hence the transpose.
+            potential = (
+                state.grid.phi[:, :, middle_index]
+                .detach()
+                .cpu()
+                .numpy()
+                .T
+            )
+            rgba, scale = signed_potential_rgba(
+                potential,
+                percentile=self.config.potential_color_percentile,
+            )
+            self.rr.log("fields/potential_midplane_z/rgba", self.rr.Image(rgba))
+            self.log_scalar(
+                "fields/potential_midplane_z/color_scale_v",
+                scale,
+                "Potential color scale ± [V]",
+            )
+        except Exception as error:
+            log.warning("Could not log potential slice image: %s", error)
 
     def log_scalar(self, path, value, legend_name=None):
         """Log a one-element scalar batch to a leaf entity path."""
@@ -130,8 +161,16 @@ class RerunSink:
                 rrb.Horizontal(
                     rrb.Vertical(
                         rrb.Spatial3DView(name="GYRAC 3D scene", origin="/"),
-                        rrb.TextDocumentView(
-                            name="Experiment parameters", origin="/experiment/parameters"
+                        rrb.Horizontal(
+                            rrb.TextDocumentView(
+                                name="Experiment parameters",
+                                origin="/experiment/parameters",
+                            ),
+                            rrb.Spatial2DView(
+                                name="Mid-plane potential φ(x,y) [V]",
+                                origin="/fields/potential_midplane_z",
+                            ),
+                            column_shares=[3, 2],
                         ),
                         row_shares=[3, 2],
                     ),

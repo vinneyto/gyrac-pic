@@ -44,6 +44,8 @@ class VisualizationConfig:
     log_domain: bool = True
     log_field_vectors: bool = False
     log_charge_density: bool = False
+    log_potential_slice: bool = True
+    potential_color_percentile: float = 99.0
     energy_color_mode: str = "running_percentile"
     electron_color_min_ev: float = 0.0
     electron_color_max_ev: float = 1e6
@@ -56,6 +58,8 @@ class VisualizationConfig:
             raise ValueError(f"mode must be one of {sorted(valid)}")
         if "file" in self.mode and self.recording_path is None:
             raise ValueError("a recording_path is required for file visualization")
+        if not 0.0 < self.potential_color_percentile <= 100.0:
+            raise ValueError("potential_color_percentile must be in (0, 100]")
 
 
 @dataclass

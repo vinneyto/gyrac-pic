@@ -18,6 +18,7 @@ from gyrac_pic import (
 from gyrac_pic.device import dtype_from_name
 from gyrac_pic.grid import CartesianGrid
 import torch
+from gyrac_pic.visualization.color_maps import signed_potential_rgba
 
 
 def test_sparse_grid_uses_real_grid_nodes_and_domain_bounds():
@@ -45,6 +46,14 @@ def test_local_grid_patch_draws_every_selected_computational_node():
         for coordinate in coordinates:
             node_index = (coordinate - low) / spacing
             assert math.isclose(node_index, round(node_index), abs_tol=1e-10)
+
+
+def test_signed_potential_colormap_is_blue_white_red():
+    rgba, scale = signed_potential_rgba([[-2.0, 0.0, 2.0]], percentile=100)
+    assert scale == 2.0
+    assert tuple(rgba[0, 0]) == (0, 0, 255, 255)
+    assert tuple(rgba[0, 1]) == (255, 255, 255, 255)
+    assert tuple(rgba[0, 2]) == (255, 0, 0, 255)
 
 
 def test_cylinder_mesh_respects_radius_and_length():

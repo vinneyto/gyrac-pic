@@ -117,6 +117,8 @@ def _cylinder_mesh(radius, length, segments=96):
 
 
 def _parameter_table(domain, grid, modules, config):
+    z_nodes = np.linspace(domain.bounds[2][0], domain.bounds[2][1], grid.shape[2])
+    potential_plane_z = float(z_nodes[np.argmin(np.abs(z_nodes))])
     rows = [
         ("Recording / experiment ID", config.name, "—"),
         ("Compute device", str(grid.device), "—"),
@@ -134,6 +136,9 @@ def _parameter_table(domain, grid, modules, config):
         ("Poisson solve stride", f"{config.poisson.solve_stride}", "steps"),
         ("Global grid display", "at most 11 nodes per axis", "visualization only"),
         ("Local plasma grid display", "every computational node", "actual cells"),
+        ("Potential image plane", f"z = {potential_plane_z:.6g}", "m"),
+        ("Potential image color", "blue / white / red", "negative / zero / positive V"),
+        ("Potential image range", f"symmetric {config.visualization.potential_color_percentile:g}th percentile", "V"),
     ]
     for species in config.species:
         label = species.name.capitalize()
