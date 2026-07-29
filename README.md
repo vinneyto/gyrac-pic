@@ -1,89 +1,112 @@
 # GYRAC PIC
 
-Исследовательская 3D электростатическая Particle-in-Cell модель водородной
-плазмы для GYRAC. Ядро написано на PyTorch, поддерживает CUDA, MPS и CPU,
-релятивистский Boris pusher, векторизованный CIC, matrix-free PCG, подключаемые
-поля TE111 и магнитного зеркала, checkpoint и необязательную визуализацию Rerun.
+GYRAC PIC is a research-oriented 3D electrostatic Particle-in-Cell model of
+hydrogen plasma. Its PyTorch core supports CUDA, MPS, and CPU execution and
+provides a relativistic Boris pusher, vectorized CIC operations, a matrix-free
+PCG solver, pluggable TE111 and magnetic-mirror fields, checkpoints, and
+optional Rerun visualization.
 
-> Параметры цилиндра в профиле `classic_gyrac_x` — модельные размеры идеальной
-> полости, подобранные около 2.4 GHz, а не измеренные размеры установки.
+> The cylinder parameters in the `classic_gyrac_x` profile describe an idealized
+> model cavity tuned near 2.4 GHz; they are not measured dimensions of the
+> apparatus.
 
-## Установка и быстрый запуск
+## Installation
 
 ```bash
-pip install -e '.[test,visualization,notebook]'
+pip install -e '.[test,visualization]'
 pytest
-jupyter lab notebooks/
 ```
 
-Минимальный API:
+## Experiments
 
-```python
-from gyrac_pic import BoxDomain, Experiment, make_smoke_config
-
-config = make_smoke_config()
-domain = BoxDomain((-0.05, 0.05), (-0.05, 0.05), (-0.05, 0.05), config.grid.shape)
-experiment = Experiment.create(config, domain, modules=[])
-experiment.initialize()
-experiment.run(10)
-experiment.save_checkpoint("runs/example/final.pt")
-```
-
-Во время `run()` каждые `visualization_stride` шагов печатается одна строка
-`GYRAC_DIAGNOSTICS` в JSON-формате. Она содержит энергии и скорости обоих видов,
-число живых/потерянных частиц, заряд и электрическое поле сетки, потенциал и
-состояние PCG. Эти строки удобно целиком приложить к отчёту о запуске.
-
-Расширенный отдельный запуск с аналитической вращающейся TE111-модой,
-резонансным магнитным полем, trails и энергетическим балансом:
+The repository contains three directly comparable experiment entry points:
 
 ```bash
-uv run python experiments/05_validated_te111_autoresonance.py
+# Self-consistent plasma field only
+python experiments/01_self_field_expansion.py
+
+# Self-consistent field and analytic rotating TE111 mode, without magnets
+python experiments/02_te111_without_magnets.py
+
+# Full validated scenario: self-consistent field, TE111 mode, and magnetic mirror
+python experiments/03_full_te111_autoresonance.py
 ```
 
-По умолчанию он выполняет 10 000 шагов и сохраняет уникальные `run.rrd`,
-`final.pt` и `summary.json` в `runs/validated_te111/<UTC timestamp>/`. Для
-анализа достаточно прислать строку `GYRAC_SUMMARY` или этот JSON-файл.
-В Rerun основные графики находятся в `/plots`, расширенные — в
-`/advanced/plots`, а индивидуальные координаты и импульсы — в
-`/tracked/plots`. Для них автоматически создаются отдельные Time Series views.
-3D view собирается из подключённых объектов: показывает разреженные линии
-реальной декартовой сетки и границы domain, полупрозрачный PEC-цилиндр только
-при наличии резонаторного модуля, а катушки и стрелку поля — только при наличии
-магнитного модуля.
-Глобальная сетка намеренно прорежена до 11 узлов на ось. Вокруг начальной
-плазмы поверх неё рисуется яркий локальный фрагмент **каждой настоящей
-расчётной ячейки**, чтобы визуальный шаг нельзя было принять за `dx/dy/dz`.
-Рядом с параметрами отображается динамический поперечный срез потенциала на
-ближайшей к `z=0` плоскости сетки: синий — отрицательный потенциал, белый —
-нулевой, красный — положительный; диапазон симметрично нормируется в вольтах.
-Это самосогласованный электростатический потенциал плазмы `φ`, полученный из
-решения Пуассона, а не отдельный скалярный потенциал внешней RF-моды.
-Графики автоматически разделены по единицам (`eV`, `J`, `W`, `V/m`, `m`,
-безразмерные величины), а легенды содержат физическое название и единицу.
-В стартовом blueprint виден только главный график энергии частиц; остальные
-записанные серии доступны в entity tree и могут быть добавлены вручную.
-Панель **Experiment parameters** показывает Markdown-таблицу конфигурации с
-единицами. Один запущенный процесс создаёт одну Rerun recording; другие запуски
-открываются как отдельные timestamped `.rrd` из каталога `runs/`.
+All three experiments use the same cylindrical domain, initial plasma,
+self-consistent Poisson solve, 10,000-step loop, advanced diagnostics, particle
+trails, checkpoint format, and output layout. They differ only in their external
+field modules:
 
-В 3D-сцене на поперечной плоскости `z≈0` показываются векторы электрического
-поля: **синие стрелки** — самосогласованное поле плазмы, **оранжевые** —
-высокочастотное поле резонатора. Направление стрелки физическое, а длина
-нормирована для визуализации по 95-му процентилю и ограничена 4 мм; фактический
-масштаб в В/м записывается рядом как `scale_v_per_m`. Стрелки не заменяют
-расчётную сетку и не влияют на расчёт. Оболочка резонатора показана
-полупрозрачной и без непрозрачных торцевых крышек, чтобы частицы, локальные
-реальные ячейки и стрелки поля оставались видимыми.
+| Experiment | Self-consistent field | TE111 resonator | Magnetic mirror |
+| --- | --- | --- | --- |
+| `01_self_field_expansion.py` | Yes | No | No |
+| `02_te111_without_magnets.py` | Yes | Yes | No |
+| `03_full_te111_autoresonance.py` | Yes | Yes | Yes |
 
-`.rrd` содержит только визуализацию; физическое продолжение выполняется из
-`.pt` checkpoint. Физический ramp 100 μs при стандартном шаге требует примерно
-125 миллионов шагов и поэтому не запускается notebook по умолчанию. Укрупнённый
-демонстрационный ramp обязан быть помечен `nonphysical_scaled_ramp=True`.
+Common command-line options are:
 
-## Численные ограничения
+```text
+--steps N          number of simulation steps (default: 10000)
+--report-stride N  advanced diagnostic reporting interval (default: 100)
+--no-viewer        record to a file without spawning the Rerun viewer
+```
 
-Модель не включает собственное магнитное поле плазмы, столкновения, ионизацию,
-излучение, вторичную эмиссию и обратную связь плазмы с модой. Цилиндрическая PEC
-граница является stair-step маской на декартовой сетке. Перед интерпретацией
-результатов проверяйте сходимость по сетке, числу частиц, шагу и PCG tolerance.
+Each run creates a unique UTC-timestamped directory under `runs/` containing:
+
+- `run.rrd` — the Rerun visualization recording;
+- `final.pt` — the physical simulation checkpoint;
+- `run_config.json` — the serialized experiment configuration;
+- `summary.json` — advanced diagnostics and run metadata.
+
+The process also prints `GYRAC_SUMMARY` and `GYRAC_SUMMARY_PATH` lines. Sharing
+the summary line or `summary.json` is normally sufficient for an initial review
+of a run.
+
+## Diagnostics and visualization
+
+Standard diagnostics include particle energies and speeds for both species,
+alive and lost particle counts, grid charge, electric field, potential, and PCG
+convergence information. Advanced diagnostics add the energy balance, external
+and RF work, plasma-cloud radii, gyro-phase statistics, tracked trajectories,
+and fields sampled at electron positions.
+
+The main Rerun plots are stored under `/plots`, advanced plots under
+`/advanced/plots`, and individual particle coordinates and momenta under
+`/tracked/plots`. The initial blueprint displays only the main particle-energy
+plot; all recorded series remain available in the entity tree and can be added
+to a view manually.
+
+The 3D view is assembled from the enabled modules. It always shows sparse lines
+from the real Cartesian grid and the domain boundary. It adds the translucent
+PEC cylinder only when the resonator module is enabled, and adds coils and a
+magnetic-field indicator only when the magnetic module is enabled.
+
+The global grid display is intentionally limited to at most 11 nodes per axis.
+A bright local section around the initial plasma shows every actual simulation
+cell so that the visual spacing cannot be mistaken for `dx`, `dy`, or `dz`.
+The parameter area also contains a dynamic transverse potential slice at the
+grid plane nearest `z=0`: blue is negative, white is zero, and red is positive.
+The color range is normalized symmetrically in volts. This is the
+self-consistent electrostatic plasma potential `phi` obtained from the Poisson
+solve, not a scalar potential for the external RF mode.
+
+On the transverse plane near `z=0`, blue arrows show the self-consistent plasma
+electric field and orange arrows show the resonator RF electric field. Arrow
+directions are physical, while lengths are normalized for visualization using
+the 95th percentile and capped at 4 mm. The corresponding physical scale in
+V/m is recorded as `scale_v_per_m`. These arrows do not replace the simulation
+grid and do not affect the calculation.
+
+A `.rrd` file contains visualization data only. Resume the physical simulation
+from the `.pt` checkpoint, not from the Rerun recording. At the standard time
+step, a physical 100 microsecond magnetic ramp requires approximately 125
+million steps and is therefore not run by default. Any deliberately accelerated
+demonstration ramp must be marked with `nonphysical_scaled_ramp=True`.
+
+## Numerical limitations
+
+The model does not include the plasma self-magnetic field, collisions,
+ionization, radiation, secondary emission, or feedback from the plasma to the
+resonator mode. The cylindrical PEC boundary is represented as a stair-step
+mask on a Cartesian grid. Before interpreting results, check convergence with
+respect to grid resolution, particle count, time step, and PCG tolerance.

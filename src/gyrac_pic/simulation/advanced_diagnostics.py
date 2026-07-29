@@ -15,7 +15,7 @@ from ..particles import kinetic_energy, velocity_from_momentum
 class AdvancedDiagnosticsCollector:
     """Collect a compact, serializable energy balance without changing PIC state."""
 
-    def __init__(self, experiment, rf_module, sample_stride=10, report_stride=100):
+    def __init__(self, experiment, rf_module=None, sample_stride=10, report_stride=100):
         self.experiment = experiment
         self.rf_module = rf_module
         self.sample_stride = sample_stride
@@ -62,7 +62,7 @@ class AdvancedDiagnosticsCollector:
         time = state.time_s
         external_power = 0.0
         rf_power = 0.0
-        rf_e = rf_b = None
+        rf_e = rf_b = torch.empty(0, device=self.experiment.device)
         for module in self.experiment.modules:
             power, e_magnitude, b_magnitude = self._module_power(module, time)
             external_power += power
@@ -171,7 +171,7 @@ class AdvancedDiagnosticsCollector:
             "electron_max_larmor_radius_m": larmor_max,
             "electron_mean_magnetic_moment_j_per_t": magnetic_moment_mean,
             "electron_gyro_phase_coherence": phase_coherence,
-            "rf_envelope": self.rf_module.envelope(time),
+            "rf_envelope": self.rf_module.envelope(time) if self.rf_module else 0.0,
             "rf_e_rms_at_electrons_v_per_m": (
                 float(torch.sqrt(torch.mean(rf_e**2))) if len(rf_e) else 0.0
             ),
